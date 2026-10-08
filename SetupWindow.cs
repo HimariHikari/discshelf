@@ -45,7 +45,7 @@ public sealed class SetupWindow : Window
         theme.SelectionChanged += (_, _) => { if (theme.SelectedItem is ThemeDefinition choice) Settings.ThemeId = choice.Id; }; preferences.Children.Add(theme);
         Check(preferences, "New games require a disc by default", Settings.DefaultRequiresDisc, v => Settings.DefaultRequiresDisc = v);
         Text(preferences, "Confirm this for each game when linking it. DiscShelf cannot reliably detect a game's DRM requirement. For a game that works without its DVD, choose No and Play will launch the installed file directly.");
-        Check(preferences, "Show install options when a new game disc is added", Settings.SuggestInstall, v => Settings.SuggestInstall = v);
+        Check(preferences, "Ask to install when an uninstalled game disc is inserted", Settings.SuggestInstall, v => Settings.SuggestInstall = v);
         Check(preferences, "Look up game details automatically", Settings.AutoLookup, v => Settings.AutoLookup = v);
         Text(preferences, "Wikipedia/Wikidata are ready without a key. Optional RAWG/IGDB credentials are available in Settings.");
         var footer = new Grid { Margin = new Thickness(0, 22, 0, 0) }; footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });

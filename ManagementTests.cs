@@ -55,6 +55,10 @@ internal static class ManagementTests
         File.WriteAllText(store.LibraryPath, "[{\"Title\":\"Old disc-free game\",\"RequiresDisc\":false},{\"Title\":\"Old disc game\",\"RequiresDisc\":true}]");
         var legacy = store.Load(); Check(legacy.All(g => g.DiscRequirementConfirmed) && !legacy[0].RequiresDisc && legacy[1].RequiresDisc, "Legacy libraries must preserve both disc preferences when upgrading.");
         var registry = InstallationService.ReadInstalledApps(); Check(registry.Apps.All(a => a.Id.Length > 0 && a.Name.Length > 0), "Read-only Windows installation discovery returned invalid entries.");
+        var prompts = new DiscInsertionPrompts(); var insertedDisc = new DiscSnapshot("D:\\", "GAME", "disc-prompt");
+        Check(prompts.Observe([insertedDisc]).Contains(insertedDisc.Id) && prompts.Observe([insertedDisc]).Count == 0, "The same insertion must only be offered once.");
+        prompts.Observe([]); Check(prompts.Observe([insertedDisc]).Contains(insertedDisc.Id), "Removal and reinsertion must create a new insertion event.");
+        Check(prompts.Observe([insertedDisc with { Id = "different-disc" }]).Contains("different-disc"), "Swapping discs in the same drive must create a new event.");
         var imported = InstalledGameImport.FromExecutable(gameExe, false);
         Check(imported.LaunchPath == gameExe && !imported.RequiresDisc && !imported.DiscRequirementConfirmed && imported.Title.Length > 0, "Installed-game imports must save executable locations and ask for the disc preference on first Play.");
         var collection = new List<Game>(); Check(InstalledGameImport.AddUnique(collection, [imported, InstalledGameImport.FromExecutable(gameExe, true)]).Count == 1 && collection.Count == 1, "Importing the same executable twice must not create duplicate entries.");

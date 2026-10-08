@@ -93,11 +93,11 @@ public sealed class SettingsWindow : Window
         Check(library, "Remember recently played games", Settings.RecordPlayHistory, v => Settings.RecordPlayHistory = v);
         Check(library, "Minimise DiscShelf after launching a game", Settings.MinimiseAfterLaunch, v => Settings.MinimiseAfterLaunch = v);
         Check(library, "New games require a disc by default", Settings.DefaultRequiresDisc, v => Settings.DefaultRequiresDisc = v);
-        Check(library, "Show installation options for newly inserted games", Settings.SuggestInstall, v => Settings.SuggestInstall = v);
+        Check(library, "Ask to install when an uninstalled game disc is inserted", Settings.SuggestInstall, v => Settings.SuggestInstall = v);
         library.Children.Add(Action("Allow removed discs to be detected again", () => { Settings.IgnoredDiscIds.Clear(); notice.Text = "Save settings to allow previously removed discs to be added again."; }));
         Note(library, "Saved data: " + themes.Folder[..^7]); library.Children.Add(Action("Open library folder", () => Open(System.IO.Path.GetDirectoryName(themes.Folder)!)));
         Note(library, "Set the disc check on each game's information screen. Turn it off for installed games that don't need a DVD. Install and Uninstall open the game's own wizard only when you choose them. Right-click a cover or press Delete to remove a library entry; Manage supports multiple games.");
-        Note(library, "DiscShelf v1 · 1.3\nDescriptions retain their source links. Wikipedia text uses CC BY-SA terms; Wikidata uses CC0. Images keep their original rights. Source links appear with every saved database match.");
+        Note(library, "DiscShelf v1 · 1.3.1\nDescriptions retain their source links. Wikipedia text uses CC BY-SA terms; Wikidata uses CC0. Images keep their original rights. Source links appear with every saved database match.");
 
         var footer = new Grid { Margin = new Thickness(0, 20, 0, 0) }; footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); footer.Children.Add(notice);
         var cancel = new Button { Content = "Cancel", IsCancel = true, Margin = new Thickness(8, 0, 0, 0) }; Grid.SetColumn(cancel, 1); footer.Children.Add(cancel);

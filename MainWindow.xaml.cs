@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         Closed += (_, _) => { closed = true; timer.Stop(); };
         PreviewKeyDown += HandleNavigationKey;
         UpdateClock();
+        Activated += (_, _) => UpdateInstallOffer();
     }
     private void Save() => store.Save(games);
     private void Status(string message) => StatusText.Text = message;
@@ -100,6 +101,7 @@ public partial class MainWindow : Window
             DiscAction.Content = "Check for disc"; DriveDot.Fill = new SolidColorBrush(Color.FromRgb(173, 206, 233));
         }
         if (selected != null && DetailOverlay.Visibility == Visibility.Visible) FillDetails();
+        UpdateInstallOffer();
     }
     private async Task ScanDrives(bool catalogue = true)
     {
@@ -109,40 +111,45 @@ public partial class MainWindow : Window
         {
             var snapshot = await Task.Run(() => (Drives: DiscService.GetOpticalDrives(), Discs: DiscService.GetDiscs()));
             if (closed) return;
-            opticalDrives = snapshot.Drives;
-            if (DriveSelection.RememberFirst(settings, snapshot.Discs)) settingsStore.Save(settings);
-            var chosen = DriveSelection.Resolve(settings, opticalDrives);
-            var discs = snapshot.Discs.Where(d => d.Root == chosen).ToList();
-            present = discs; UpdateDrivePicker();
-            foreach (var root in observed.Keys.Where(root => discs.All(d => d.Root != root)).ToList()) observed.Remove(root);
-            foreach (var disc in discs)
-            {
-                if (!catalogue) break;
-                if (!LibraryPolicy.CanCatalogue(settings, disc)) continue;
-                if (observed.TryGetValue(disc.Root, out var old) && old == disc.Id) continue;
-                var game = games.FirstOrDefault(g => g.DiscId == disc.Id);
-                if (game == null)
-                {
-                    Status("Reading " + disc.Root + "…");
-                    var scan = await Task.Run(() => DiscService.Scan(disc));
-                    if (closed) return;
-                    if (!scan.IsGameDisc) { observed[disc.Root] = disc.Id; Status("This disc wasn’t recognised as a PC game. Choose Add game to add it manually."); continue; }
-                    // The tray may have opened while reading: don't create an entry for an incomplete scan.
-                    if (!Directory.Exists(disc.Root)) continue;
-                    game = games.FirstOrDefault(g => g.DiscId.Length == 0 && MetadataPolicy.MatchKey(g.Title) == MetadataPolicy.MatchKey(scan.Title));
-                    if (game != null) { game.DiscId = disc.Id; game.DiscRoot = disc.Root; game.DiscLabel = disc.Label; Save(); }
-                    else game = AddScan(scan);
-                    Refresh();
-                    if (settings.SuggestInstall && !operationBusy) ShowGame(game);
-                    if (settings.AutoLookup) _ = TryAutomaticInfo(game);
-                }
-                else { game.DiscRoot = disc.Root; Save(); Status(game.Title + " is ready. Its artwork is already saved."); }
-                observed[disc.Root] = disc.Id;
-            }
-            Refresh();
+            await ProcessDiscSnapshot(snapshot.Drives, snapshot.Discs, catalogue);
         }
         catch (Exception e) { Status("Disc scan could not finish: " + e.Message); }
         finally { scanning = false; }
+    }
+    private async Task ProcessDiscSnapshot(List<OpticalDrive> drives, List<DiscSnapshot> snapshotDiscs, bool catalogue)
+    {
+        opticalDrives = drives;
+        if (DriveSelection.RememberFirst(settings, snapshotDiscs)) settingsStore.Save(settings);
+        var chosen = DriveSelection.Resolve(settings, opticalDrives);
+        var discs = snapshotDiscs.Where(d => d.Root == chosen).ToList();
+        var inserted = insertionPrompts.Observe(discs);
+        present = discs; UpdateDrivePicker();
+        foreach (var root in observed.Keys.Where(root => discs.All(d => d.Root != root)).ToList()) observed.Remove(root);
+        foreach (var disc in discs)
+        {
+            if (!catalogue) break;
+            if (!LibraryPolicy.CanCatalogue(settings, disc)) continue;
+            if (observed.TryGetValue(disc.Root, out var old) && old == disc.Id) continue;
+            var game = games.FirstOrDefault(g => g.DiscId == disc.Id);
+            if (game == null)
+            {
+                Status("Reading " + disc.Root + "…");
+                var scan = await Task.Run(() => DiscService.Scan(disc));
+                if (closed) return;
+                if (!scan.IsGameDisc) { observed[disc.Root] = disc.Id; Status("This disc wasn’t recognised as a PC game. Choose Add game to add it manually."); continue; }
+                // The tray may have opened while reading: don't create an entry for an incomplete scan.
+                if (!Directory.Exists(disc.Root)) continue;
+                game = games.FirstOrDefault(g => g.DiscId.Length == 0 && MetadataPolicy.MatchKey(g.Title) == MetadataPolicy.MatchKey(scan.Title));
+                if (game != null) { game.DiscId = disc.Id; game.DiscRoot = disc.Root; game.DiscLabel = disc.Label; Save(); }
+                else game = AddScan(scan);
+                Refresh();
+                if (settings.AutoLookup) _ = TryAutomaticInfo(game);
+            }
+            else { game.DiscRoot = disc.Root; Save(); Status(game.Title + " is ready. Its artwork is already saved."); }
+            observed[disc.Root] = disc.Id;
+            if (inserted.Contains(disc.Id)) QueueInstallOffer(game, disc);
+        }
+        Refresh();
     }
     private Game AddScan(DiscScan scan)
     {
@@ -446,6 +453,11 @@ public partial class MainWindow : Window
     private void HandleNavigationKey(object sender, KeyEventArgs e)
     {
         if (BootOverlay.Visibility == Visibility.Visible) { e.Handled = true; return; }
+        if (DiscOfferOverlay.Visibility == Visibility.Visible)
+        {
+            if (e.Key == Key.Escape) { DiscOfferLaterClick(this, new RoutedEventArgs()); e.Handled = true; }
+            return;
+        }
         if (e.Key == Key.Escape)
         {
             if (DetailOverlay.Visibility == Visibility.Visible) DetailOverlay.Visibility = Visibility.Collapsed;

@@ -12,11 +12,12 @@ public partial class App : Application
         {
             Shutdown(e.Args.Length == 2 && int.TryParse(e.Args[1], out var fixtureCode) ? fixtureCode : 1); return;
         }
-        if (e.Args.Any(arg => arg is "--self-test" or "--preview" or "--metadata-test" or "--startup-test"))
+        if (e.Args.Any(arg => arg is "--self-test" or "--preview" or "--metadata-test" or "--startup-test" or "--insertion-test"))
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
         }
         if (e.Args.Contains("--startup-test")) { _ = VerifyStartup(); return; }
+        if (e.Args.Contains("--insertion-test")) { _ = VerifyInsertion(); return; }
         if (e.Args.Contains("--metadata-test"))
         {
             _ = VerifyMetadata();
@@ -88,6 +89,31 @@ public partial class App : Application
         var main = new MainWindow();
         MainWindow = main;
         if (!Dispatcher.HasShutdownStarted) main.Show();
+    }
+    private async Task VerifyInsertion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "DiscShelf-insertion-" + Guid.NewGuid().ToString("N"));
+        MainWindow? main = null;
+        try
+        {
+            main = new MainWindow(root, hiddenTest: true);
+            await main.VerifyDiscInsertion(() =>
+            {
+                var content = (FrameworkElement)main.Content; content.Measure(new Size(1380, 900)); content.Arrange(new Rect(0, 0, 1380, 900)); content.UpdateLayout();
+                var bitmap = new RenderTargetBitmap(1380, 900, 96, 96, PixelFormats.Pbgra32); bitmap.Render(content);
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                using var output = File.Create(Path.Combine(Environment.CurrentDirectory, "preview-insertion.png")); encoder.Save(output);
+            });
+            File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "insertion-test-results.txt"), "PASS: detected game saves and offers installation, skipping stays quiet, reinsertion asks once without duplication, disc removal dismisses the offer, linked games and removed discs are skipped, detection/prompt settings are respected, and movie discs are ignored.\n");
+            Shutdown(0);
+        }
+        catch (Exception error) { File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "insertion-test-results.txt"), "FAIL: " + error); Shutdown(1); }
+        finally
+        {
+            main?.Close();
+            var resolved = Path.GetFullPath(root);
+            if (resolved.StartsWith(Path.Combine(Path.GetTempPath(), "DiscShelf-insertion-"), StringComparison.OrdinalIgnoreCase) && Directory.Exists(resolved)) Directory.Delete(resolved, true);
+        }
     }
     private async Task VerifyStartup()
     {

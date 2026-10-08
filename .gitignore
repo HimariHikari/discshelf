@@ -16,3 +16,5 @@ ui-test-results.txt
 metadata-test-results.txt
 startup-test-error.txt
 startup-test-results.txt
+insertion-test-results.txt
+preview-insertion.png

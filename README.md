@@ -1,4 +1,4 @@
-# DiscShelf v1 · version 1.3
+# DiscShelf v1 · version 1.3.1
 
 A native Windows launcher for PC CD/DVD games, with a PS3/PSP-inspired menu, animated waves, a saved library, configurable metadata sources, and importable themes.
 
@@ -19,6 +19,8 @@ First launch opens a three-step setup for your DVD drive, theme, library default
 3. Choose **Install from disc** to run the game's setup, or **Edit location** to link an existing installed copy. Setup, **Add game**, and **Settings → Library** all offer **Import installed games**: find the playable `.exe` files yourself, selecting multiple files when useful. Imported titles, locations and other information are saved in your local library. When first linking or playing a new imported game, confirm whether it needs its DVD to play. DiscShelf cannot reliably infer a game's DRM requirement from its DVD or metadata; change your choice on the game's information screen whenever needed.
 4. **Play** checks the selected drive every time for games with **Check the game disc every time I press Play** enabled. If the drive is empty, it sends an open-tray command and asks you to insert the game. Press Play again after insertion. A different identified disc does not launch the game and is not automatically ejected. With this preference disabled, Play launches the saved installed executable directly, without checking for an optical drive.
 5. Remove the disc. Its cover and saved information remain available.
+
+Automatic detection is enabled by default and checks the selected DVD drive every four seconds. When it detects a game without a working installed-game link, the menu asks **Would you like to install this game?** Choose **Install now** to open the setup selection and game installer, or **Not now** to keep the saved entry and install later. It asks once per detected insertion; removing and reinserting an uninstalled game can offer installation again. Already linked games, excluded discs, and non-game media are skipped. Both automatic detection and the installation prompt can be changed in Settings.
 
 Select a DVD drive using the dropdown on Home or **Settings → Disc drives**. Manual selection stays saved. A disconnected manually selected drive does not silently switch to another device. Open/close tray buttons are also available in Settings.
 
@@ -95,10 +97,11 @@ Tests run in isolated temporary folders:
 Start-Process .\release\DiscShelf.exe -ArgumentList '--self-test' -Wait
 Start-Process .\release\DiscShelf.exe -ArgumentList '--preview' -Wait
 Start-Process .\release\DiscShelf.exe -ArgumentList '--startup-test' -Wait
+Start-Process .\release\DiscShelf.exe -ArgumentList '--insertion-test' -Wait
 Start-Process .\release\DiscShelf.exe -ArgumentList '--metadata-test' -Wait
 ```
 
-The self-test verifies installer/uninstaller plans and process tracking with harmless child-process fixtures, cancellation/failure handling, removal verification, removed-disc exclusion, legacy library migration, drive selection, launch policy, encryption, settings, themes, metadata, cached artwork, and recovery. Preview renders Home, game details, setup, installation/removal dialogs, boot, themes, and Settings; it exercises removal/undo, multiple-game removal, selection/filtering, navigation, persistence, search, favourites and history. The startup test actually completes first-launch setup in an isolated data folder and checks that it does not repeat. The metadata test performs a live no-key lookup and cover download. Tests do not install or uninstall any real game on the test computer.
+The self-test verifies installer/uninstaller plans and process tracking with harmless child-process fixtures, cancellation/failure handling, removal verification, removed-disc exclusion, legacy library migration, drive selection, launch policy, encryption, settings, themes, metadata, cached artwork, and recovery. Preview renders Home, game details, setup, installation/removal dialogs, boot, themes, and Settings; it exercises removal/undo, multiple-game removal, selection/filtering, navigation, persistence, search, favourites and history. The startup test actually completes first-launch setup in an isolated data folder and checks that it does not repeat. The insertion test feeds fixture disc snapshots through the scanner and verifies installation offers, skipping, reinsertion, removal, installed/excluded games, movie discs, and preference controls. The metadata test performs a live no-key lookup and cover download. Tests do not install or uninstall any real game on the test computer.
 
 ## Sources
 
