@@ -1,0 +1,13 @@
+{
+  "Id": "silver-mist",
+  "Name": "Silver Mist",
+  "Author": "You",
+  "BackgroundTop": "#142334",
+  "BackgroundMiddle": "#4A617B",
+  "BackgroundBottom": "#0D1725",
+  "Panel": "#283D54",
+  "Accent": "#E2F0FF",
+  "Text": "#F4F8FF",
+  "Muted": "#C0D0E2",
+  "Wave": "#D6EAFF"
+}

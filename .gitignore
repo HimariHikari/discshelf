@@ -1,0 +1,15 @@
+bin/
+obj/
+release/
+*.zip
+self-test-results.txt
+preview.png
+preview-compact.png
+preview-details.png
+preview-boot.png
+preview-theme.png
+preview-settings.png
+preview-settings-*.png
+ui-test-results.txt
+metadata-test-results.txt
+startup-test-error.txt
