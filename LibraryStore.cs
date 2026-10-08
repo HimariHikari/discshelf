@@ -34,7 +34,16 @@ public sealed class LibraryStore
             { throw new IOException("The library and its backup could not be read. Your saved files have been preserved at " + Root, e); }
         }
     }
-    private List<Game> Read(string path) => JsonSerializer.Deserialize<List<Game>>(File.ReadAllText(path), options) ?? throw new JsonException("Empty library file.");
+    private List<Game> Read(string path)
+    {
+        var json = File.ReadAllText(path);
+        var result = JsonSerializer.Deserialize<List<Game>>(json, options) ?? throw new JsonException("Empty library file.");
+        using var document = JsonDocument.Parse(json);
+        // Existing libraries already have a saved disc preference; keep it when upgrading.
+        for (var i = 0; i < result.Count; i++)
+            if (!document.RootElement[i].TryGetProperty(nameof(Game.DiscRequirementConfirmed), out _)) result[i].DiscRequirementConfirmed = true;
+        return result;
+    }
     public void Save(IEnumerable<Game> games)
     {
         var temporary = LibraryPath + ".tmp";

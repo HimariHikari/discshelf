@@ -5,6 +5,11 @@ namespace DiscShelf;
 
 public sealed class AppSettings
 {
+    public bool SetupCompleted { get; set; }
+    public bool DefaultRequiresDisc { get; set; } = true;
+    public string PreferredGameFolder { get; set; } = "";
+    public bool SuggestInstall { get; set; } = true;
+    public List<string> IgnoredDiscIds { get; set; } = [];
     public string ThemeId { get; set; } = "classic-blue";
     public string PreferredDrive { get; set; } = "";
     public string FirstUsedDrive { get; set; } = "";
@@ -23,7 +28,6 @@ public sealed class AppSettings
     public string TileSize { get; set; } = "Standard";
     public string CoverFit { get; set; } = "Fill";
     public string FontFamily { get; set; } = "Segoe UI";
-    public bool ShowSamples { get; set; } = true;
     public bool RecordPlayHistory { get; set; } = true;
     public bool MinimiseAfterLaunch { get; set; }
     public bool AutoLookup { get; set; } = true;
@@ -38,6 +42,7 @@ public sealed class AppSettings
     public AppSettings Copy() => JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(this))!;
     public void Validate()
     {
+        IgnoredDiscIds = (IgnoredDiscIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
         ScanIntervalSeconds = Math.Clamp(ScanIntervalSeconds, 2, 30);
         BootDurationSeconds = Math.Clamp(BootDurationSeconds, 1, 5);
         WaveOpacity = double.IsFinite(WaveOpacity) ? Math.Clamp(WaveOpacity, 0, 1) : 0.8;

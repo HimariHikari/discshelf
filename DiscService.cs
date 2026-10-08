@@ -73,7 +73,7 @@ public static class DiscService
         gameDisc |= File.Exists(autorun) && !Directory.Exists(Path.Combine(disc.Root, "VIDEO_TS"));
         return new(disc, title, artwork, gameDisc);
     }
-    private static IEnumerable<string> ReadFiles(string root)
+    internal static IEnumerable<string> ReadFiles(string root)
     {
         var queue = new Queue<(string Path, int Depth)>(); queue.Enqueue((root, 0));
         var count = 0;

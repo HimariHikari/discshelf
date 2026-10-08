@@ -8,8 +8,9 @@ public static class Dialogs
 {
     public static Window Create(Window owner, string title, double width = 510, double height = 340)
     {
-        var window = new Window { Owner = owner, Title = title, Width = width, Height = height, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        var window = new Window { Title = title, Width = width, Height = height, WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = new SolidColorBrush(Color.FromRgb(12, 30, 55)), Foreground = Brushes.White, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false };
+        if (owner.IsLoaded) window.Owner = owner;
         window.SetResourceReference(Window.BackgroundProperty, "ThemePanel"); return window;
     }
     public static string? Ask(Window owner, string title, string caption, string initial = "")

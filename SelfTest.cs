@@ -11,6 +11,7 @@ public static class SelfTest
         try
         {
             FeatureTests.Run(root);
+            ManagementTests.Run(root);
             static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
             var store = new LibraryStore(Path.Combine(root, "data"));
             Assert(store.Load().Count == 0, "New library must be empty.");
@@ -43,7 +44,7 @@ public static class SelfTest
             File.WriteAllText(Path.Combine(root, "test.exe"), "not an image");
             failed = false; try { store.CopyArtwork(Path.Combine(root, "test.exe"), "test"); } catch (IOException) { failed = true; }
             Assert(failed, "Non-image artwork must be rejected.");
-            File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "self-test-results.txt"), "PASS: drive selection/first-use memory, correct/missing/wrong disc launch policy, disconnected drive handling, disc-free games, credential encryption, settings persistence, 8 built-in themes, theme import validation, metadata provider fallback and failure handling, source attribution, ambiguous-match protection, RAWG/IGDB parsing, disc recognition, cached artwork, library persistence and recovery.\n");
+            File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "self-test-results.txt"), "PASS: first-launch settings, installed-game imports/deduplication/persistence, saved game folders and locations, EXE/MSI installation and process tracking, installer path validation, uninstall discovery/parsing, cancellation/failure/restart handling, verified removal, removed-disc suppression/restoration, legacy migration, drive selection, disc-required/disc-free launch policy, encryption, themes, metadata, artwork caching and recovery.\n");
             return 0;
         }
         catch (Exception error) { File.WriteAllText(Path.Combine(Environment.CurrentDirectory, "self-test-results.txt"), "FAIL: " + error + "\n"); return 1; }

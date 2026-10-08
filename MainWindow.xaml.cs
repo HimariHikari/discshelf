@@ -22,22 +22,17 @@ public partial class MainWindow : Window
     private Game? selected;
     private string view = "Home";
     private bool scanning, closed;
+    private readonly bool hiddenTest;
     private AppSettings settings = new();
     private SettingsStore settingsStore = null!;
     private ThemeCatalog themes = null!;
     private List<OpticalDrive> opticalDrives = [];
     private bool updatingDrivePicker;
     private static readonly string[] Categories = ["Home", "Library", "Recently played", "Favorites", "Settings"];
-    private readonly List<Game> demos =
-    [
-        new() { Title = "Marvel: Ultimate Alliance", ReleaseYear = "2006", Genre = "Action role-playing", Developer = "Raven Software; Beenox (PC)", Publisher = "Activision", IsDemo = true, ArtworkPath = "pack://application:,,,/Assets/ultimate-alliance.PNG", SourceUrl = "https://en.wikipedia.org/?curid=4744869", ArtworkSource = "Cover via Wikipedia; original publisher copyright.",
-            Description = "Build a team of Marvel heroes and take on Doctor Doom’s alliance of supervillains. This action role-playing game lets you switch between heroes, develop their abilities and explore locations across the Marvel universe, with single-player and cooperative modes." },
-        new() { Title = "Guitar Hero III: Legends of Rock", ReleaseYear = "2007", Genre = "Rhythm", Developer = "Aspyr (PC port)", Publisher = "Activision", IsDemo = true, ArtworkPath = "pack://application:,,,/Assets/guitar-hero-iii.jpg", SourceUrl = "https://en.wikipedia.org/?curid=12171158", ArtworkSource = "Preview cover: Guitar-hero-iii-cover-image.jpg, via Wikipedia. Cover copyright belongs to its original publisher.",
-            Description = "Play along to rock songs by matching scrolling notes with a guitar controller or keyboard. Progress through a career, take on guitar battles and unlock new songs. The PC version was developed by Aspyr from Neversoft’s original game." }
-    ];
     public MainWindow() : this(null) { }
-    internal MainWindow(string? dataRoot)
+    internal MainWindow(string? dataRoot, bool hiddenTest = false)
     {
+        this.hiddenTest = hiddenTest;
         InitializeComponent();
         try { store = new(dataRoot); games = store.Load(); settingsStore = new(store.Root); settings = settingsStore.Load(); themes = new(store.Root); metadata.Configure(settings); view = settings.StartPage; }
         catch (Exception e) { MessageBox.Show(e.Message, "Library could not be opened", MessageBoxButton.OK, MessageBoxImage.Error); Application.Current.Shutdown(); store = null!; games = []; return; }
@@ -48,6 +43,8 @@ public partial class MainWindow : Window
             if (settingsStore.Notice.Length > 0) Status(settingsStore.Notice);
             if (settings.StartMaximised) WindowState = WindowState.Maximized;
             if (settings.ShowBootScreen) await PlayBootScreen();
+            if (closed) return;
+            if (!settings.SetupCompleted) await RunSetup();
             if (closed) return;
             await ScanDrives(settings.ScanAutomatically); timer.Start();
         };
@@ -74,17 +71,15 @@ public partial class MainWindow : Window
             "Library" => games.OrderBy(g => g.Title),
             _ => games.OrderByDescending(g => g.AddedAt)
         };
-        bool preview = games.Count == 0 && view == "Home" && query.Length == 0 && settings.ShowSamples;
-        if (preview) filtered = demos;
         filtered = filtered.Where(g => g.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || g.Developer.Contains(query, StringComparison.OrdinalIgnoreCase));
         var visible = filtered.ToList(); GameCards.ItemsSource = visible;
         LibraryAttributionLinks.ItemsSource = visible.SelectMany(g => g.MetadataSources).DistinctBy(s => s.Name).Select(s => new MetadataAttribution(s.Name,
             s.Name switch { "RAWG" => "https://rawg.io/", "IGDB" => "https://www.igdb.com/", "Wikipedia" => "https://en.wikipedia.org/", _ => s.Url })).ToList();
         EmptyPanel.Visibility = visible.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        SectionHeading.Text = preview ? "Sample collection" : view == "Home" ? "Recently added" : view == "Library" ? "All games" : view == "Recently played" ? "Your last sessions" : "Your favourite games";
-        SectionNote.Text = preview ? "Sample games · add your own to start" : visible.Count + (visible.Count == 1 ? " game" : " games");
+        SectionHeading.Text = view == "Home" ? "Recently added" : view == "Library" ? "All games" : view == "Recently played" ? "Your last sessions" : "Your favourite games";
+        SectionNote.Text = visible.Count + (visible.Count == 1 ? " game" : " games");
         EmptyHeading.Text = query.Length > 0 ? "No matching games" : view == "Recently played" ? "No recent games" : view == "Favorites" ? "No favourites yet" : "No games yet";
-        EmptyDescription.Text = query.Length > 0 ? "Try another title or developer." : view == "Recently played" ? "Launch a game from your library to see it here." : view == "Favorites" ? "Open a game and choose Add to favourites." : "Insert a PC game disc or choose Add game to get started.";
+        EmptyDescription.Text = query.Length > 0 ? "Try another title or developer." : view == "Recently played" ? "Launch a game from your library to see it here." : view == "Favorites" ? "Open a game and choose Add to favourites." : "Insert a PC game disc, or choose Add game to import an installed game.";
         foreach (var (button, name) in new[] { (HomeNav, "Home"), (LibraryNav, "Library"), (RecentNav, "Recently played"), (FavoritesNav, "Favorites") })
         {
             button.Tag = name == view ? "active" : "";
@@ -94,8 +89,8 @@ public partial class MainWindow : Window
             var current = games.FirstOrDefault(g => g.DiscId == present[0].Id);
             DriveEyebrow.Text = "Disc inserted · " + present[0].Root;
             DriveHeading.Text = current?.Title ?? Identity.CleanTitle(present[0].Label);
-            DriveDescription.Text = current != null ? "Ready to browse. This game stays in your library when you remove the disc." : "This disc wasn’t recognised as a PC game. You can add it manually.";
-            DiscAction.Content = current != null ? "View game" : "Check for disc"; DriveDot.Fill = new SolidColorBrush(Color.FromRgb(157, 230, 217));
+            DriveDescription.Text = current != null ? "Install, play or manage this game. Its details stay here after you remove the disc." : !LibraryPolicy.CanCatalogue(settings, present[0]) ? "You removed this disc from the library. Choose Add this disc to restore it." : "Choose Check for disc to add this game to your library.";
+            DiscAction.Content = current != null ? "View game" : !LibraryPolicy.CanCatalogue(settings, present[0]) ? "Add this disc" : "Check for disc"; DriveDot.Fill = new SolidColorBrush(Color.FromRgb(157, 230, 217));
         }
         else
         {
@@ -108,7 +103,7 @@ public partial class MainWindow : Window
     }
     private async Task ScanDrives(bool catalogue = true)
     {
-        if (scanning || closed) return;
+        if (scanning || closed || operationBusy) return;
         scanning = true;
         try
         {
@@ -123,6 +118,7 @@ public partial class MainWindow : Window
             foreach (var disc in discs)
             {
                 if (!catalogue) break;
+                if (!LibraryPolicy.CanCatalogue(settings, disc)) continue;
                 if (observed.TryGetValue(disc.Root, out var old) && old == disc.Id) continue;
                 var game = games.FirstOrDefault(g => g.DiscId == disc.Id);
                 if (game == null)
@@ -137,6 +133,7 @@ public partial class MainWindow : Window
                     if (game != null) { game.DiscId = disc.Id; game.DiscRoot = disc.Root; game.DiscLabel = disc.Label; Save(); }
                     else game = AddScan(scan);
                     Refresh();
+                    if (settings.SuggestInstall && !operationBusy) ShowGame(game);
                     if (settings.AutoLookup) _ = TryAutomaticInfo(game);
                 }
                 else { game.DiscRoot = disc.Root; Save(); Status(game.Title + " is ready. Its artwork is already saved."); }
@@ -150,7 +147,8 @@ public partial class MainWindow : Window
     private Game AddScan(DiscScan scan)
     {
         var game = new Game { Title = scan.Title, DiscId = scan.Disc.Id, DiscRoot = scan.Disc.Root, DiscLabel = scan.Disc.Label,
-            RequiresDisc = System.Text.RegularExpressions.Regex.IsMatch(scan.Disc.Root, @"^[A-Za-z]:\\$") };
+            RequiresDisc = settings.DefaultRequiresDisc && System.Text.RegularExpressions.Regex.IsMatch(scan.Disc.Root, @"^[A-Za-z]:\\$") };
+        LibraryPolicy.AllowDisc(settings, scan.Disc.Id); settingsStore.Save(settings);
         if (scan.Artwork.Length > 0)
         {
             try { game.ArtworkPath = store.CopyArtwork(scan.Artwork, game.Id); game.ArtworkSource = "Artwork copied from your disc."; }
@@ -204,10 +202,10 @@ public partial class MainWindow : Window
         FavoriteButton.Content = game.Favorite ? "★ Remove from favourites" : "☆ Add to favourites";
         foreach (var b in new[] { InfoButton, FavoriteButton, ArtworkButton, RenameButton, RemoveButton, ChangeLaunchButton }) b.IsEnabled = !game.IsDemo;
         LaunchButton.IsEnabled = true; RequiresDiscCheck.IsChecked = game.RequiresDisc; RequiresDiscCheck.IsEnabled = !game.IsDemo;
-        AddSampleButton.Visibility = game.IsDemo ? Visibility.Visible : Visibility.Collapsed;
         OpenDiscButton.Visibility = game.DiscPresent ? Visibility.Visible : Visibility.Collapsed;
         LaunchButton.Content = "▶  Play";
-        LaunchHint.Text = game.IsDemo ? "Insert your game disc or choose Add my copy. Play can open an empty DVD drive." : game.RequiresDisc && !game.DiscPresent ? "Insert the game disc. Play will open the selected drive if it is empty." : game.LaunchPath.Length > 0 ? "Game file: " + game.LaunchPath : "Choose Play to select the installed game’s executable (.exe).";
+        LaunchHint.Text = game.LaunchPath.Length == 0 ? "Install from your disc, or edit the game location to link an existing installation." : game.RequiresDisc ? "Play checks the game disc every time." : "Plays without a disc.";
+        UpdateManagementDetails(game);
     }
     private void Navigate(string name) { view = name; DetailOverlay.Visibility = Visibility.Collapsed; SearchBox.Clear(); Refresh(); }
     private void HomeClick(object sender, RoutedEventArgs e) => Navigate("Home");
@@ -219,25 +217,32 @@ public partial class MainWindow : Window
     private async void ScanClick(object sender, RoutedEventArgs e)
     {
         if (present.Count > 0 && games.FirstOrDefault(g => g.DiscId == present[0].Id) is Game game) ShowGame(game);
-        else { Status("Checking for a game disc…"); await ScanDrives(); if (present.Count == 0) Status("No game disc found. Insert a DVD or choose Add game."); }
+        else
+        {
+            if (present.FirstOrDefault() is DiscSnapshot disc) { LibraryPolicy.AllowDisc(settings, disc.Id); settingsStore.Save(settings); observed.Remove(disc.Root); }
+            Status("Checking for a game disc…"); await ScanDrives(); if (present.Count == 0) Status("No game disc found. Insert a DVD or choose Add game.");
+        }
     }
     private async void AddClick(object sender, RoutedEventArgs e)
     {
-        var dialog = Dialogs.Create(this, "Add a game", 520, 335);
+        var dialog = Dialogs.Create(this, "Add a game", 520, 430);
         var panel = new StackPanel { Margin = new Thickness(25) };
         panel.Children.Add(new TextBlock { Text = "Add a game to your library", FontSize = 20, FontWeight = FontWeights.Light, Margin = new Thickness(0, 0, 0, 15) });
         panel.Children.Add(new TextBlock { Text = "Game title", FontSize = 11, Margin = new Thickness(0, 0, 0, 6) });
         var title = new TextBox { ToolTip = "Enter the game title" }; panel.Children.Add(title);
         var add = new Button { Content = "Add to library", IsDefault = true, Margin = new Thickness(0, 14, 0, 12) };
         var folder = new Button { Content = "Import a disc folder…" }; panel.Children.Add(add); panel.Children.Add(folder);
+        var installed = new Button { Content = "Import installed games…", Margin = new Thickness(0, 12, 0, 0) }; panel.Children.Add(installed);
         panel.Children.Add(new TextBlock { Text = "Inserted DVDs are added automatically while DiscShelf is open.", FontSize = 11, Foreground = Brushes.LightSteelBlue, Margin = new Thickness(0, 14, 0, 0), TextWrapping = TextWrapping.Wrap });
-        bool scanFolder = false;
+        bool scanFolder = false, importInstalled = false;
         add.Click += (_, _) => { if (title.Text.Trim().Length > 0) dialog.DialogResult = true; };
         folder.Click += (_, _) => { scanFolder = true; dialog.DialogResult = true; };
+        installed.Click += (_, _) => { importInstalled = true; dialog.DialogResult = true; };
         dialog.Content = panel; dialog.Loaded += (_, _) => title.Focus();
         if (dialog.ShowDialog() != true) return;
         if (scanFolder) { await ImportFolder(); return; }
-        var game = new Game { Title = title.Text.Trim() }; games.Add(game); Save(); Refresh(); ShowGame(game);
+        if (importInstalled) { ImportInstalledGames(this, settings); return; }
+        var game = new Game { Title = title.Text.Trim(), RequiresDisc = settings.DefaultRequiresDisc }; games.Add(game); Save(); Refresh(); ShowGame(game);
         Status(game.Title + " added. Choose Find game details to complete its information.");
     }
     private async Task ImportFolder()
@@ -283,16 +288,18 @@ public partial class MainWindow : Window
     private void RemoveClick(object sender, RoutedEventArgs e)
     {
         if (selected is not Game game || game.IsDemo) return;
-        if (MessageBox.Show("Remove " + game.Title + " from your library? This leaves the installed game and cached artwork files on your PC.", "Remove game", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        games.Remove(game); Save(); selected = null; DetailOverlay.Visibility = Visibility.Collapsed; Refresh();
+        ConfirmRemove(game);
     }
-    private bool PickLaunch(Game game)
+    private bool PickLaunch(Game game, string installationFolder = "")
     {
         var picker = new OpenFileDialog { Title = "Select the installed game’s .exe file", Filter = "Game executable (*.exe)|*.exe", CheckFileExists = true };
         if (game.LaunchPath.Length > 0 && Directory.Exists(Path.GetDirectoryName(game.LaunchPath))) picker.InitialDirectory = Path.GetDirectoryName(game.LaunchPath);
+        else if (installationFolder.Length > 0 && Directory.Exists(installationFolder)) picker.InitialDirectory = installationFolder;
+        else if (Directory.Exists(settings.PreferredGameFolder)) picker.InitialDirectory = settings.PreferredGameFolder;
         if (picker.ShowDialog(this) != true) return false;
         if (!Path.GetExtension(picker.FileName).Equals(".exe", StringComparison.OrdinalIgnoreCase)) { MessageBox.Show("Choose a Windows .exe file.", "Choose an executable"); return false; }
-        game.LaunchPath = picker.FileName; Save(); FillDetails(); Status("Launch file saved for " + game.Title + "."); return true;
+        if (!picker.FileName.Equals(game.LaunchPath, StringComparison.OrdinalIgnoreCase)) game.InstalledAppId = "";
+        game.LaunchPath = picker.FileName; Save(); FillDetails(); Status("Game location saved for " + game.Title + "."); return ConfirmDiscRequirement(game);
     }
     private void ChangeLaunchClick(object sender, RoutedEventArgs e) { if (selected is Game game && !game.IsDemo) PickLaunch(game); }
     private async void LaunchClick(object sender, RoutedEventArgs e)
@@ -301,6 +308,14 @@ public partial class MainWindow : Window
         LaunchButton.IsEnabled = false;
         try
         {
+            if (operationBusy) { Status("Finish the current installation or uninstall before playing."); return; }
+            if (!game.IsDemo)
+            {
+                if (game.LaunchPath.Length == 0 && !PickLaunch(game)) return;
+                if (!ConfirmDiscRequirement(game)) return;
+            }
+            if (game.RequiresDisc || game.IsDemo)
+            {
             var snapshot = await Task.Run(() => (Drives: DiscService.GetOpticalDrives(), Discs: DiscService.GetDiscs()));
             opticalDrives = snapshot.Drives;
             if (DriveSelection.RememberFirst(settings, snapshot.Discs)) settingsStore.Save(settings);
@@ -317,12 +332,9 @@ public partial class MainWindow : Window
             if (decision.Action is LaunchAction.DiscMissing or LaunchAction.WrongDisc) { MessageBox.Show("Insert the correct disc for " + game.Title + " in " + decision.DriveRoot + " and press Play again.", "Game disc needed"); return; }
             if (game.IsDemo)
             {
-                var saved = games.FirstOrDefault(g => MetadataPolicy.MatchKey(g.Title) == MetadataPolicy.MatchKey(game.Title));
-                if (saved != null) { ShowGame(saved); Status("Your copy is selected. Press Play to launch it."); }
-                else { MessageBox.Show("Choose Add my copy to add this game to your library, then select its installed game file. Example games contain information and artwork only.", "Add your own game"); }
                 return;
             }
-        if (game.LaunchPath.Length == 0) { PickLaunch(game); return; }
+            }
         if (!Path.GetExtension(game.LaunchPath).Equals(".exe", StringComparison.OrdinalIgnoreCase)) { MessageBox.Show("Choose a Windows .exe file using the … button.", "Choose an executable"); return; }
         if (!File.Exists(game.LaunchPath)) { MessageBox.Show("The launch file is unavailable. Reinsert its disc or choose a new executable using the … button.", "Game unavailable"); return; }
         try
@@ -339,13 +351,14 @@ public partial class MainWindow : Window
     private void OpenDiscClick(object sender, RoutedEventArgs e) { if (selected is Game game && game.DiscPresent) OpenPath(game.DiscRoot); }
     private void SourceClick(object sender, RoutedEventArgs e) { if (selected?.SourceUrl is string url && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https") OpenPath(url); }
     private static void OpenPath(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-    private void SettingsClick(object sender, RoutedEventArgs e)
+    private async void SettingsClick(object sender, RoutedEventArgs e)
     {
         var window = CreateSettingsPreview();
-        if (window.ShowDialog() == true) { settings = window.Settings; settingsStore.Save(settings); metadata.Configure(settings); ApplySettings(settings); Refresh(); _ = ScanDrives(settings.ScanAutomatically); Status("Settings saved."); }
+        if (window.ShowDialog() == true) { settings = window.Settings; settingsStore.Save(settings); metadata.Configure(settings); observed.Clear(); ApplySettings(settings); Refresh(); if (!settings.SetupCompleted) await RunSetup(); _ = ScanDrives(settings.ScanAutomatically); Status("Settings saved."); }
         else ApplySettings(settings);
     }
-    internal SettingsWindow CreateSettingsPreview() => new(this, settings, themes, opticalDrives, ApplySettings);
+    internal SettingsWindow CreateSettingsPreview() => new(this, settings, themes, opticalDrives, ApplySettings,
+        (owner, draft) => new GameLocationsWindow(owner, games, draft, () => { Save(); Refresh(); }).ShowDialog(), ImportInstalledGames);
     internal void PreviewTheme(string id) { var draft = settings.Copy(); draft.ThemeId = id; ApplySettings(draft); }
     internal void ResetPreviewTheme() => ApplySettings(settings);
     private void ApplySettings(AppSettings value)
@@ -383,28 +396,21 @@ public partial class MainWindow : Window
         try { await Task.Run(() => DriveControl.SetTray(root, true)); Status("Open-tray command sent to " + root); }
         catch (Exception error) { MessageBox.Show(error.Message, "DVD drive could not open"); }
     }
-    private void RequiresDiscChanged(object sender, RoutedEventArgs e) { if (selected is Game game && !game.IsDemo) { game.RequiresDisc = RequiresDiscCheck.IsChecked == true; Save(); FillDetails(); } }
+    private void RequiresDiscChanged(object sender, RoutedEventArgs e) { if (selected is Game game && !game.IsDemo) { game.RequiresDisc = RequiresDiscCheck.IsChecked == true; game.DiscRequirementConfirmed = true; Save(); FillDetails(); } }
     private void LinkDiscClick(object sender, RoutedEventArgs e)
     {
         if (selected is not Game game || game.IsDemo) return;
         var disc = present.FirstOrDefault();
         if (disc == null) { MessageBox.Show("Insert this game’s disc in the selected drive first.", "No readable disc"); return; }
-        game.DiscId = disc.Id; game.DiscRoot = disc.Root; game.DiscLabel = disc.Label; game.RequiresDisc = true; Save(); Refresh(); Status("Inserted disc linked to " + game.Title + ".");
-    }
-    private void AddSampleClick(object sender, RoutedEventArgs e)
-    {
-        if (selected is not Game sample || !sample.IsDemo) return;
-        var existing = games.FirstOrDefault(g => MetadataPolicy.MatchKey(g.Title) == MetadataPolicy.MatchKey(sample.Title));
-        if (existing != null) { ShowGame(existing); return; }
-        var game = new Game { Title = sample.Title, Description = sample.Description, Developer = sample.Developer, Publisher = sample.Publisher, ReleaseYear = sample.ReleaseYear, Genre = sample.Genre,
-            ArtworkPath = sample.ArtworkPath, ArtworkSource = sample.ArtworkSource, SourceUrl = sample.SourceUrl, RequiresDisc = true };
-        games.Add(game); Save(); Refresh(); ShowGame(game); Status("Your copy of " + game.Title + " was added.");
+        if (games.Any(g => g != game && g.DiscId == disc.Id)) { MessageBox.Show("This disc is already linked to another library entry.", "Disc already linked"); return; }
+        LibraryPolicy.AllowDisc(settings, disc.Id); settingsStore.Save(settings);
+        game.DiscId = disc.Id; game.DiscRoot = disc.Root; game.DiscLabel = disc.Label; Save(); Refresh(); Status("Inserted disc linked to " + game.Title + ".");
     }
     private void AttributionClick(object sender, RoutedEventArgs e) { if (((Button)sender).Tag is string url && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https") OpenPath(url); }
     private void WebSearchClick(object sender, RoutedEventArgs e) { if (selected is Game game) OpenPath(MetadataPolicy.WebSearch(game.Title)); }
     private void EditDetailsClick(object sender, RoutedEventArgs e)
     {
-        if (selected is not Game game || game.IsDemo) { Status("Choose Add my copy before editing an example game."); return; }
+        if (selected is not Game game || game.IsDemo) return;
         var dialog = new GameDetailsDialog(this, game);
         if (dialog.ShowDialog() == true) { dialog.SaveTo(game); Save(); Refresh(); }
     }
@@ -449,6 +455,7 @@ public partial class MainWindow : Window
         }
         if (Keyboard.FocusedElement is TextBox || DetailOverlay.Visibility == Visibility.Visible || Keyboard.Modifiers != ModifierKeys.None) return;
         var cardFocused = Keyboard.FocusedElement is Button { Tag: Game };
+        if (e.Key == Key.Delete && Keyboard.FocusedElement is Button { Tag: Game game } && !game.IsDemo) { ConfirmRemove(game); e.Handled = true; return; }
         if (e.Key is Key.Left or Key.Right && !cardFocused)
         { MoveCategory(e.Key == Key.Right ? 1 : -1); e.Handled = true; }
         else if (e.Key == Key.Down && !cardFocused && GameCards.Items.Count > 0)
@@ -469,16 +476,15 @@ public partial class MainWindow : Window
             if (FindButton(VisualTreeHelper.GetChild(root, i)) is Button found) return found;
         return null;
     }
-    internal void ShowPreviewDetails() => ShowGame(demos[0]);
+    internal void ShowPreviewDetails() => ShowGame(new Game { Title = "Preview Adventure", Description = "Game details and installation options appear here for games you add to your collection.", RequiresDisc = false });
     internal void HidePreviewDetails() => DetailOverlay.Visibility = Visibility.Collapsed;
     internal void VerifyInterface()
     {
         static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
-        Assert(GameCards.Items.Count == 2 && games.Count == 0, "Home preview must be separate from the library.");
+        Assert(GameCards.Items.Count == 0 && games.Count == 0 && EmptyPanel.Visibility == Visibility.Visible, "A new library must start empty without bundled example games.");
         Assert((string)HomeNav.Tag == "active" && string.IsNullOrEmpty((string)LibraryNav.Tag), "Category selection is not visible.");
         MoveCategory(1); Assert(view == "Library" && (string)LibraryNav.Tag == "active", "Right-arrow category navigation failed.");
         MoveCategory(-1); Assert(view == "Home", "Left-arrow category navigation failed.");
-        ShowGame(demos[0]); Assert(LaunchButton.IsEnabled && !FavoriteButton.IsEnabled && DetailDescription.Text.Contains("Marvel"), "Examples must show actual information and allow the Play disc check.");
         Navigate("Library"); Assert(GameCards.Items.Count == 0 && EmptyPanel.Visibility == Visibility.Visible, "Empty library did not render.");
         var game = new Game { Title = "Smoke Test Adventure", Developer = "Test Studio" }; games.Add(game); Save(); Refresh();
         Assert(GameCards.Items.Count == 1 && store.Load().Count == 1, "New game did not populate library.");
@@ -490,5 +496,17 @@ public partial class MainWindow : Window
         Navigate("Favorites"); Assert(GameCards.Items.Count == 0, "Favorites must start empty.");
         game.Favorite = true; Refresh(); Assert(GameCards.Items.Count == 1, "Favorites filter failed.");
         ShowGame(game); Assert(LaunchButton.IsEnabled && DetailTitle.Text == game.Title, "Real game details did not render.");
+        Assert(InstallButton.IsEnabled && UninstallButton.IsEnabled && RemoveButton.IsEnabled, "Real games need install, uninstall, and remove actions.");
+        game.DiscId = "ui-disc"; game.RequiresDisc = false; game.DiscRequirementConfirmed = true; Save(); Refresh();
+        Assert(RequiresDiscCheck.IsChecked == false && LaunchHint.Text.Contains("Install", StringComparison.OrdinalIgnoreCase), "Disc-free preferences must appear in game details.");
+        RemoveEntries([game]); Assert(games.Count == 0 && store.Load().Count == 0 && settings.IgnoredDiscIds.Contains("ui-disc") && UndoRemoveButton.Visibility == Visibility.Visible, "Library removal must save and suppress automatic re-add.");
+        UndoRemoveClick(this, new RoutedEventArgs()); Assert(games.Count == 1 && store.Load().Count == 1 && !settings.IgnoredDiscIds.Contains("ui-disc"), "Undo must restore the game and disc recognition.");
+        var other = new Game { Title = "Second game", DiscId = "ui-disc-2" }; games.Add(other); Save();
+        RemoveEntries([game, other]); Assert(games.Count == 0 && lastRemoved.Count == 2, "Multiple games must be removable together.");
+        UndoRemoveClick(this, new RoutedEventArgs()); Assert(games.Count == 2 && store.Load().Count == 2, "Bulk undo must restore both games.");
+        SetOperationBusy(true, "UI operation fixture"); ShowGame(game); Assert(!InstallButton.IsEnabled && !RemoveButton.IsEnabled && OperationBanner.Visibility == Visibility.Visible, "Installation must prevent conflicting game actions.");
+        SetOperationBusy(false, "Ready"); Assert(InstallButton.IsEnabled && RemoveButton.IsEnabled, "Game actions must return after the operation.");
+        var wizard = CreateSetupPreview(); Assert(wizard.Pages.Items.Count == 3 && !wizard.Settings.SetupCompleted, "First-launch setup must have three steps and preserve completion until finished.");
+        wizard.Settings.ThemeId = "violet"; Assert(settings.ThemeId != "violet", "Cancelled setup must not mutate saved settings.");
     }
 }

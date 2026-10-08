@@ -25,15 +25,17 @@ public sealed class Game
     public string Genre { get; set; } = "";
     public bool Favorite { get; set; }
     public bool RequiresDisc { get; set; } = true;
+    public bool DiscRequirementConfirmed { get; set; }
+    public string InstalledAppId { get; set; } = "";
     public List<MetadataAttribution> MetadataSources { get; set; } = [];
     public DateTime AddedAt { get; set; } = DateTime.Now;
     public DateTime? LastPlayedAt { get; set; }
     [JsonIgnore] public bool IsDemo { get; set; }
     [JsonIgnore] public bool DiscPresent { get; set; }
     [JsonIgnore] public string Subtitle => string.Join("  ·  ", new[] { ReleaseYear, string.IsNullOrWhiteSpace(Genre) ? "PC DVD" : Genre }.Where(s => !string.IsNullOrWhiteSpace(s)));
-    [JsonIgnore] public string Status => IsDemo ? "Sample game" : DiscPresent ? "Disc inserted" : "In library";
+    [JsonIgnore] public string Status => DiscPresent ? "Disc inserted" : "In library";
     [JsonIgnore] public string Letter => string.IsNullOrWhiteSpace(Title) ? "?" : Title[..1].ToUpperInvariant();
-    [JsonIgnore] public Brush Accent => new SolidColorBrush(IsDemo && Title.Contains("Guitar") ? Color.FromRgb(135, 66, 32) : Color.FromRgb(26, 69, 116));
+    [JsonIgnore] public Brush Accent => new SolidColorBrush(Color.FromRgb(26, 69, 116));
     [JsonIgnore] public ImageSource? Cover
     {
         get

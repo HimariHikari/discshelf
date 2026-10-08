@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -15,7 +16,8 @@ public sealed class SettingsWindow : Window
     private readonly ComboBox themePicker;
     private readonly PasswordBox rawg = new(), igdbSecret = new();
     private readonly TextBox igdbId = new();
-    public SettingsWindow(Window owner, AppSettings settings, ThemeCatalog themes, IReadOnlyList<OpticalDrive> drives, Action<AppSettings> preview)
+    public SettingsWindow(Window owner, AppSettings settings, ThemeCatalog themes, IReadOnlyList<OpticalDrive> drives, Action<AppSettings> preview,
+        Action<Window, AppSettings>? editLocations = null, Action<Window, AppSettings>? importGames = null)
     {
         if (owner.IsLoaded) Owner = owner;
         Title = "DiscShelf settings"; Width = 870; Height = 730; MinWidth = 760; MinHeight = 600; WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false;
@@ -74,18 +76,28 @@ public sealed class SettingsWindow : Window
         Note(metadata, "To change providers, fallback order, search queries, or endpoints in source, edit MetadataPolicy.cs. If no match is found, use Search the web or Edit details on the game information screen.");
 
         var startup = Page(tabs, "Startup"); Heading(startup, "When DiscShelf starts");
+        startup.Children.Add(Action("Run first-launch setup again", () => { Settings.SetupCompleted = false; notice.Text = "Save settings to open the setup wizard again."; }));
         Check(startup, "Show the discshelfv1 boot screen", Settings.ShowBootScreen, v => Settings.ShowBootScreen = v);
         Select(startup, "Boot screen duration", new[] { "1 second", "2 seconds", "3 seconds", "5 seconds" }, Settings.BootDurationSeconds + (Settings.BootDurationSeconds == 1 ? " second" : " seconds"), v => Settings.BootDurationSeconds = int.Parse(v.Split(' ')[0]));
         Check(startup, "Start maximised", Settings.StartMaximised, v => Settings.StartMaximised = v);
         var starts = new[] { new DriveChoice("Home", "Home"), new("Library", "Games"), new("Recently played", "Recent"), new("Favorites", "Favourites") };
         var pagePicker = Choice(startup, "Start on", starts, p => p.Root == Settings.StartPage); pagePicker.SelectionChanged += (_, _) => Settings.StartPage = ((DriveChoice)pagePicker.SelectedItem).Root;
         var library = Page(tabs, "Library"); Heading(library, "Your collection");
-        Check(library, "Show example games when my library is empty", Settings.ShowSamples, v => Settings.ShowSamples = v);
+        Note(library, "Your library starts empty. Import installed PC games by choosing their executable files, or insert a game disc to add it.");
+        if (importGames != null) library.Children.Add(Action("Import installed games…", () => importGames(this, Settings)));
+        if (editLocations != null) library.Children.Add(Action("Edit game locations…", () => editLocations(this, Settings)));
+        Label(library, "Default folder when finding installed games");
+        var gameFolder = new TextBlock { Text = Settings.PreferredGameFolder.Length > 0 ? Settings.PreferredGameFolder : "Use the last folder chosen in Windows", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) }; library.Children.Add(gameFolder);
+        library.Children.Add(Action("Choose default game folder…", () => { var picker = new OpenFolderDialog { Title = "Choose the folder containing installed PC games" }; if (Directory.Exists(Settings.PreferredGameFolder)) picker.InitialDirectory = Settings.PreferredGameFolder; if (picker.ShowDialog(this) == true) { Settings.PreferredGameFolder = picker.FolderName; gameFolder.Text = picker.FolderName; } }));
+        Note(library, "Imported game entries and location edits are saved immediately. Other preferences are saved with Save settings.");
         Check(library, "Remember recently played games", Settings.RecordPlayHistory, v => Settings.RecordPlayHistory = v);
         Check(library, "Minimise DiscShelf after launching a game", Settings.MinimiseAfterLaunch, v => Settings.MinimiseAfterLaunch = v);
+        Check(library, "New games require a disc by default", Settings.DefaultRequiresDisc, v => Settings.DefaultRequiresDisc = v);
+        Check(library, "Show installation options for newly inserted games", Settings.SuggestInstall, v => Settings.SuggestInstall = v);
+        library.Children.Add(Action("Allow removed discs to be detected again", () => { Settings.IgnoredDiscIds.Clear(); notice.Text = "Save settings to allow previously removed discs to be added again."; }));
         Note(library, "Saved data: " + themes.Folder[..^7]); library.Children.Add(Action("Open library folder", () => Open(System.IO.Path.GetDirectoryName(themes.Folder)!)));
-        Note(library, "Set Requires game disc on each game’s information screen. Turn it off for installed games that don’t need a DVD. The launcher never runs installers automatically.");
-        Note(library, "DiscShelf v1 · 1.2\nDescriptions retain their source links. Wikipedia text uses CC BY-SA terms; Wikidata uses CC0. Images keep their original rights. Source links appear with every saved database match.");
+        Note(library, "Set the disc check on each game's information screen. Turn it off for installed games that don't need a DVD. Install and Uninstall open the game's own wizard only when you choose them. Right-click a cover or press Delete to remove a library entry; Manage supports multiple games.");
+        Note(library, "DiscShelf v1 · 1.3\nDescriptions retain their source links. Wikipedia text uses CC BY-SA terms; Wikidata uses CC0. Images keep their original rights. Source links appear with every saved database match.");
 
         var footer = new Grid { Margin = new Thickness(0, 20, 0, 0) }; footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); footer.Children.Add(notice);
         var cancel = new Button { Content = "Cancel", IsCancel = true, Margin = new Thickness(8, 0, 0, 0) }; Grid.SetColumn(cancel, 1); footer.Children.Add(cancel);

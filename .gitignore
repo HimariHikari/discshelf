@@ -10,6 +10,9 @@ preview-boot.png
 preview-theme.png
 preview-settings.png
 preview-settings-*.png
+preview-setup-*.png
+preview-manage-*.png
 ui-test-results.txt
 metadata-test-results.txt
 startup-test-error.txt
+startup-test-results.txt

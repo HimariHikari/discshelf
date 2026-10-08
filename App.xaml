@@ -11,6 +11,7 @@
   <Style TargetType="ListBox"><Setter Property="Background" Value="{DynamicResource ThemePanel}"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="#31537E"/></Style>
   <Style TargetType="ListBoxItem"><Setter Property="Padding" Value="12"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style>
   <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{DynamicResource ThemeText}"/><Setter Property="FontFamily" Value="{DynamicResource ThemeFont}"/></Style>
+  <Style TargetType="RadioButton"><Setter Property="Foreground" Value="{DynamicResource ThemeText}"/><Setter Property="FontFamily" Value="{DynamicResource ThemeFont}"/></Style>
   <Style TargetType="PasswordBox"><Setter Property="Foreground" Value="{DynamicResource ThemeText}"/><Setter Property="Background" Value="{DynamicResource ThemePanel}"/><Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}"/><Setter Property="Padding" Value="12,10"/><Setter Property="CaretBrush" Value="White"/></Style>
   <Style TargetType="ComboBox">
    <Setter Property="Foreground" Value="{DynamicResource ThemeText}"/><Setter Property="Background" Value="{DynamicResource ThemePanel}"/><Setter Property="BorderBrush" Value="{DynamicResource ThemeBorder}"/><Setter Property="FontSize" Value="12"/><Setter Property="MinHeight" Value="34"/><Setter Property="MaxDropDownHeight" Value="260"/>
