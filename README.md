@@ -1,4 +1,6 @@
-# DiscShelf v1 · version 1.3.1
+<img src="Assets/discshelf-logo.png" alt="DiscShelf PCX DISC logo with a DVD behind it" width="160" />
+
+# DiscShelf v1 · version 1.3.2
 
 A native Windows launcher for PC CD/DVD games, with a PS3/PSP-inspired menu, animated waves, a saved library, configurable metadata sources, and importable themes.
 
@@ -43,7 +45,7 @@ Installers and uninstallers use their original Windows wizards, including any Wi
 
 Settings has Appearance, Disc drives, Metadata, Startup, and Library pages. Options include eight colour themes, JSON import/templates, wave animation and brightness, particles, clock format, tile size, cover fit, font, drive selection, empty-tray opening, automatic scanning and interval, metadata sources/fallback, automatic lookup, cover downloads, boot screen/duration, maximised startup, start page, game import and locations, default game folder, play history, and minimising after launch.
 
-The boot screen says **discshelfv1**. It is enabled by default and can be disabled in Startup settings.
+The PCX DISC badge with a DVD behind it appears in the Windows app icon, header, and boot screen. The transparent logo and multi-size icon are in `Assets`; see [branding notes](Assets/BRANDING.md). The boot screen says **discshelfv1**. It is enabled by default and can be disabled in Startup settings.
 
 See [THEMES.md](THEMES.md) for the JSON format. An editable theme example is included in `Themes/example-theme.json`. Import it through Appearance or drop your own JSON into the themes folder and reload.
 
